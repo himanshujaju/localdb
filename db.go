@@ -1,29 +1,42 @@
 package localdb
 
 import (
-  "fmt"
+  "encoding/json"
   "errors"
+  "fmt"
+  "io/ioutil"
+  "os"
 )
 
 type Database struct {
+  path string
   data map[string]string
 }
 
 // Creates a new database.
-func CreateDB() (db *Database) {
+func CreateDB(path string) (db *Database) {
+  contents, err := ioutil.ReadFile(path)
+  data := make(map[string]string)
+  if err == nil {
+    _ = json.Unmarshal(contents, &data)
+  }
+
   return &Database{
-    data: make(map[string]string),
+    path: path,
+    data: data,
   }
 }
 
 // Flushes all contents of the database and empties it.
-func (db *Database) Clear() {
+func (db *Database) Clear() (err error) {
   db.data = make(map[string]string)
+  return db.persist()
 }
 
 // Sets the value of `key` to `value`. Overwrites existing value if the key already exists.
-func (db *Database) Set(key string, value string) {
+func (db *Database) Set(key string, value string) (err error) {
   db.data[key] = value
+  return db.persist()
 }
 
 // Returns the stored value for `key` if found, returns an error otherwise.
@@ -47,6 +60,33 @@ func (db *Database) GetKeys() (keys []string) {
 
 // Removes `key` from our database.
 // No OP if the key does not already exist.
-func (db *Database) Erase(key string) {
+func (db *Database) Erase(key string) (err error){
+  _, present := db.data[key]
+  if !present {
+    return nil
+  }
+
   delete(db.data, key)
+  return db.persist()
+}
+
+func (db *Database) persist() (err error) {
+  file, err := os.Create(db.path)
+  if err != nil {
+    return err
+  }
+
+  defer file.Close()
+  jsonString, err := json.Marshal(db.data)
+  if err != nil {
+    return err
+  }
+
+  _, err = file.Write(jsonString)
+  if err != nil {
+    return err
+  }
+
+  err = file.Sync()
+  return err
 }

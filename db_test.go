@@ -2,17 +2,20 @@ package localdb
 
 import (
   "errors"
+  "os"
   "reflect"
   "testing"
 )
 
 func TestCreateEmptyDB(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   assertEqual(test, 0, len(db.GetKeys())) 
 }
 
 func TestSetsNewKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key", "value")
 
   assertEqual(test, []string{"key"}, db.GetKeys())
@@ -20,7 +23,8 @@ func TestSetsNewKey(test *testing.T) {
 }
 
 func TestOverwritesExistingKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key", "value1")
   assertEqual(test, "value1", db.data["key"])
 
@@ -30,7 +34,8 @@ func TestOverwritesExistingKey(test *testing.T) {
 }
 
 func TestGetsExistingKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key", "value")
 
   val, err := db.Get("key")
@@ -39,7 +44,8 @@ func TestGetsExistingKey(test *testing.T) {
 }
 
 func TestGetsNonExistingKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
 
   val, err := db.Get("key")
   assertEqual(test, "", val)
@@ -47,7 +53,8 @@ func TestGetsNonExistingKey(test *testing.T) {
 }
 
 func TestDropDB(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key1", "value1")
   db.Set("key2", "value2")
 
@@ -56,7 +63,8 @@ func TestDropDB(test *testing.T) {
 }
 
 func TestEraseExistingKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key1", "value1")
   db.Set("key2", "value2")
 
@@ -74,7 +82,8 @@ func TestEraseExistingKey(test *testing.T) {
 }
 
 func TestEraseNonExistentKey(test *testing.T) {
-  db := CreateDB()
+  defer tearDown("test.txt")
+  db := CreateDB("test.txt")
   db.Set("key1", "value1")
 
   db.Erase("key2")
@@ -86,9 +95,48 @@ func TestEraseNonExistentKey(test *testing.T) {
   assertEqual(test, nil, err)
 }
 
+func TestLoadsPersistedData(test *testing.T) {
+  defer tearDown("test.txt")
+  {
+    db := CreateDB("test.txt")
+    db.Set("key1", "value1")
+    db.Set("key2", "value2")
+    db.Set("key3", "value3")
+  }
+
+  db := CreateDB("test.txt")
+  val, _ := db.Get("key1")
+  assertEqual(test, "value1", val)
+
+  val, _ = db.Get("key2")
+  assertEqual(test, "value2", val)
+
+  val, _ = db.Get("key3")
+  assertEqual(test, "value3", val)
+
+  _, err := db.Get("key4")
+  assertEqual(test, errors.New("Key key4 not found in database."), err)
+}
+
+func TestCreatesEmptyDBIfIncorrectPersistedData(test *testing.T) {
+  defer tearDown("test.txt")
+  file, err := os.Create("test.txt")
+  if err != nil {
+    test.Fatal("Could not create test file!")
+  }
+  file.WriteString("test string")
+
+  db := CreateDB("test.txt")
+  assertEqual(test, 0, len(db.GetKeys()))
+}
+
 func assertEqual(t *testing.T, expected interface{}, actual interface{}) {
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Expected: %s (type %v)\n Actual: %s (type %v)", expected, reflect.TypeOf(expected),
       actual, reflect.TypeOf(actual))
 	}
+}
+
+func tearDown(path string) {
+  os.Remove(path)
 }
